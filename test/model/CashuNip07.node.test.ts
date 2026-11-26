@@ -8,7 +8,11 @@ import {
 } from '../../src/crypto/core';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { createP2PKsecret, getP2PKWitnessSignatures } from '../../src/crypto/NUT11';
-import type { NutrootLeaf } from '../../src/crypto/nutroot';
+import {
+  nutrootScriptDigest,
+  serializeNutrootLeaf,
+  type NutrootLeaf,
+} from '../../src/crypto/nutroot';
 import { inputsForPayload, proofInputContextKey } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import { CashuNip07, type Nip07Like } from '../../src/model/CashuNip07';
@@ -33,11 +37,14 @@ const MESSAGE = inputs.transactionMessage;
 const { inputContainer: CONTAINER, digest: DIGEST } = inputs.proofs.get(
   proofInputContextKey({ keysetId: KEYSET, secret: SECRET }),
 )!;
+const LEAF_HEX = bytesToHex(serializeNutrootLeaf(LEAF));
+// What a script-path cosigner signs for LEAF (NUT-10).
+const SCRIPT_DIGEST = nutrootScriptDigest(DIGEST, serializeNutrootLeaf(LEAF));
 
 // An extension that implements the safe method through the reference signer.
 const safeSigner: Nip07Like = {
   getPublicKey: async () => XONLY,
-  nip60: { signTransaction: async (m, c) => CashuNip07.signTransaction(m, c, PRIV) },
+  nip60: { signTransaction: async (m, c, leaf) => CashuNip07.signTransaction(m, c, PRIV, leaf) },
 };
 // Alby-style: raw digest signing only.
 const rawSigner: Nip07Like = {
@@ -90,25 +97,25 @@ describe('CashuNip07', () => {
 
   test('cosign prefers signTransaction and verifies over the digest', async () => {
     const [sig] = await CashuNip07.cosign(safeSigner)({
-      digest: DIGEST,
+      digest: SCRIPT_DIGEST,
       leaf: LEAF,
       transactionMessage: MESSAGE,
       inputContainer: CONTAINER,
     });
-    expect(schnorr.verify(hexToBytes(sig), DIGEST, hexToBytes(XONLY))).toBe(true);
+    expect(schnorr.verify(hexToBytes(sig), SCRIPT_DIGEST, hexToBytes(XONLY))).toBe(true);
   });
 
   test('cosign falls back to signSchnorr, and refuses with neither', async () => {
     const [sig] = await CashuNip07.cosign(rawSigner)({
-      digest: DIGEST,
+      digest: SCRIPT_DIGEST,
       leaf: LEAF,
       transactionMessage: MESSAGE,
       inputContainer: CONTAINER,
     });
-    expect(schnorr.verify(hexToBytes(sig), DIGEST, hexToBytes(XONLY))).toBe(true);
+    expect(schnorr.verify(hexToBytes(sig), SCRIPT_DIGEST, hexToBytes(XONLY))).toBe(true);
     await expect(
       CashuNip07.cosign({})({
-        digest: DIGEST,
+        digest: SCRIPT_DIGEST,
         leaf: LEAF,
         transactionMessage: MESSAGE,
         inputContainer: CONTAINER,
@@ -122,7 +129,19 @@ describe('CashuNip07', () => {
     };
     await expect(
       CashuNip07.cosign(liar)({
-        digest: DIGEST,
+        digest: SCRIPT_DIGEST,
+        leaf: LEAF,
+        transactionMessage: MESSAGE,
+        inputContainer: CONTAINER,
+      }),
+    ).rejects.toThrow('different message');
+    // A signer that takes no leaf signs the bare input digest, which no script path accepts.
+    const leafless: Nip07Like = {
+      nip60: { signTransaction: async (m, c) => CashuNip07.signTransaction(m, c, PRIV) },
+    };
+    await expect(
+      CashuNip07.cosign(leafless)({
+        digest: SCRIPT_DIGEST,
         leaf: LEAF,
         transactionMessage: MESSAGE,
         inputContainer: CONTAINER,
@@ -212,6 +231,26 @@ describe('CashuNip07', () => {
       hexToBytes(PRIV),
     );
     expect(schnorr.verify(hexToBytes(bytesKey.sig), DIGEST, hexToBytes(XONLY))).toBe(true);
+    // With a leaf it signs that leaf's script digest, and refuses bytes that are not a leaf.
+    const forLeaf = CashuNip07.signTransaction(
+      bytesToHex(MESSAGE),
+      inputContainerHex,
+      PRIV,
+      LEAF_HEX,
+    );
+    expect(forLeaf.hash).toBe(bytesToHex(SCRIPT_DIGEST));
+    const refuses = (leafHex: string, why: string) =>
+      expect(() =>
+        CashuNip07.signTransaction(bytesToHex(MESSAGE), inputContainerHex, PRIV, leafHex),
+      ).toThrow(why);
+    refuses('00ff', 'not a nutroot leaf');
+    refuses('zz', 'not a nutroot leaf');
+    // A leaf this key cannot spend gets no signature: a commit leaf, or one listing another key.
+    refuses(`0004080020${'11'.repeat(32)}`, 'does not list this key');
+    refuses(
+      bytesToHex(serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [OTHER] })),
+      'does not list this key',
+    );
   });
 
   test('completes: listed, not held, one short of n, and only then', () => {

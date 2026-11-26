@@ -33,6 +33,7 @@ import {
   NUTROOT_NUMS_KEY,
   nutrootLeafHash,
   nutrootMerkleRoot,
+  nutrootScriptDigest,
   nutrootTweakSeckey,
   type NutrootLeaf,
   verifyNutrootSpendInfo,
@@ -313,6 +314,10 @@ describeV3('M2 roundtrip', () => {
   );
 });
 
+// A script-path signature: BIP-340 over the leaf's script digest (NUT-10).
+const signLeaf = (inputDigest: Uint8Array, leafHex: string, priv: Uint8Array): string =>
+  bytesToHex(schnorr.sign(nutrootScriptDigest(inputDigest, hexToBytes(leafHex)), priv));
+
 describeV3('M3 nutroot conditions', () => {
   const sk = (n: number) => {
     const b = new Uint8Array(32);
@@ -437,7 +442,7 @@ describeV3('M3 nutroot conditions', () => {
     const { locked, keysetId } = await createLockedProof(secret);
     await expect(
       manualSwapLockedProof(keysetId, { amount: 32n, secret, C: locked.C }, (digest) =>
-        buildScriptPathWitness(tree, 0, pk(24), [bytesToHex(schnorr.sign(digest, refundPriv))]),
+        buildScriptPathWitness(tree, 0, pk(24), [signLeaf(digest, tree[0], refundPriv)]),
       ),
     ).resolves.toBeDefined();
   });
@@ -455,7 +460,7 @@ describeV3('M3 nutroot conditions', () => {
           tree,
           0,
           pk(26),
-          [bytesToHex(schnorr.sign(digest, holderPriv))],
+          [signLeaf(digest, tree[0], holderPriv)],
           bytesToHex(preimage),
         ),
       ),
@@ -470,8 +475,8 @@ describeV3('M3 nutroot conditions', () => {
     await expect(
       manualSwapLockedProof(keysetId, { amount: 32n, secret, C: locked.C }, (digest) =>
         buildScriptPathWitness(tree, 0, pk(27), [
-          bytesToHex(schnorr.sign(digest, sk(31))),
-          bytesToHex(schnorr.sign(digest, sk(33))),
+          signLeaf(digest, tree[0], sk(31)),
+          signLeaf(digest, tree[0], sk(33)),
         ]),
       ),
     ).resolves.toBeDefined();
@@ -487,7 +492,7 @@ describeV3('M3 nutroot conditions', () => {
     const { locked, keysetId } = await createLockedProof(secret);
     await expect(
       manualSwapLockedProof(keysetId, { amount: 32n, secret, C: locked.C }, (digest) =>
-        buildScriptPathWitness(tree, 0, K, [bytesToHex(schnorr.sign(digest, sk(34)))]),
+        buildScriptPathWitness(tree, 0, K, [signLeaf(digest, tree[0], sk(34))]),
       ),
     ).resolves.toBeDefined();
   });
@@ -501,7 +506,7 @@ describeV3('M3 nutroot conditions', () => {
     await expect(
       manualSwapLockedProof(keysetId, { amount: 32n, secret, C: locked.C }, (digest) => {
         const good = JSON.parse(
-          buildScriptPathWitness(tree, 0, pk(28), [bytesToHex(schnorr.sign(digest, sk(35)))]),
+          buildScriptPathWitness(tree, 0, pk(28), [signLeaf(digest, tree[0], sk(35))]),
         ) as { control: { path: string[] } };
         good.control.path = ['00'.repeat(32)];
         return JSON.stringify(good);
@@ -605,7 +610,7 @@ describeV3('M4 locked quotes', () => {
         quote: quoteB.quote,
         outputs: outputsB.map((o) => o.blindedMessage),
         signature: buildScriptPathWitness(lockB.tree, 0, pk(44), [
-          bytesToHex(schnorr.sign(digestB, payerPriv)),
+          signLeaf(digestB, lockB.tree[0], payerPriv),
         ]),
       });
       expect(response.signatures).toHaveLength(1);
@@ -632,7 +637,7 @@ describeV3('M4 locked quotes', () => {
           quote: quoteC.quote,
           outputs: outputsC.map((o) => o.blindedMessage),
           signature: buildScriptPathWitness(lockC.tree, 0, pk(44), [
-            bytesToHex(schnorr.sign(digestC, payerPriv)),
+            signLeaf(digestC, lockC.tree[0], payerPriv),
           ]),
         }),
       ).rejects.toThrow();

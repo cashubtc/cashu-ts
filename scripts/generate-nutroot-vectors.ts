@@ -688,6 +688,11 @@ const commitHash = bytesToHex(sha256(utf8ToBytes('external data')));
   const digest = transactionDigest(shape);
   const container = transcript.subarray(0, 3 + ((transcript[1] << 8) | transcript[2]));
   const digestIn = inputDigest(digest, container);
+  const digestScript = taggedHash(
+    'Cashu_NutrootScript',
+    digestIn,
+    taggedHash('Cashu_NutrootLeaf', hexToBytes(leaf)),
+  );
   const pkg: ScriptPathSigningPackage = {
     version: 'nutspA',
     transcript: bytesToHex(transcript),
@@ -702,11 +707,11 @@ const commitHash = bytesToHex(sha256(utf8ToBytes('external data')));
     ],
   };
   // The library signs with fresh aux randomness, so pin the AUX0 signature after checking it.
-  const sig = bytesToHex(schnorr.sign(digestIn, bigTo32(3n), AUX0));
+  const sig = bytesToHex(schnorr.sign(digestScript, bigTo32(3n), AUX0));
   const byLibrary = ScriptPath.signPackage(pkg, bytesToHex(bigTo32(3n)));
   const key3 = secp256k1.getPublicKey(bigTo32(3n), true).subarray(1);
-  if (!schnorr.verify(hexToBytes(byLibrary.spends[0].signatures[0]), digestIn, key3)) {
-    throw new Error('signPackage signature does not verify over the quote input digest');
+  if (!schnorr.verify(hexToBytes(byLibrary.spends[0].signatures[0]), digestScript, key3)) {
+    throw new Error('signPackage signature does not verify over the script digest');
   }
   const signed = { ...pkg, spends: [{ ...pkg.spends[0], signatures: [sig] }] };
   d.signing_package = {
@@ -717,6 +722,7 @@ const commitHash = bytesToHex(sha256(utf8ToBytes('external data')));
     digest: bytesToHex(digest),
     input_id: bytesToHex(sha256(container)),
     input_digest: bytesToHex(digestIn),
+    script_digest: bytesToHex(digestScript),
     package: pkg,
     package_string: ScriptPath.serializePackage(pkg),
     signed_string: ScriptPath.serializePackage(signed),

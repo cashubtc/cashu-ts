@@ -9,7 +9,7 @@ export type ProofState = {
    */
   witness: string | null;
   /**
-   * Input digest the v3 `witness` signs, hex (NUT-00); null otherwise.
+   * The proof's input digest in the transaction that spends it, hex (NUT-00); null otherwise.
    */
   input_digest?: string | null;
 };

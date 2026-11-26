@@ -4,6 +4,7 @@
     "leaf": "Cashu_NutrootLeaf",
     "branch": "Cashu_NutrootBranch",
     "tweak": "Cashu_NutrootTweak",
+    "script": "Cashu_NutrootScript",
     "p2bk": "Cashu_P2BK_v1"
   },
   "receiver_keyed_refund": {
@@ -31,7 +32,7 @@
         "path": []
       },
       "signatures": [
-        "0b2ea247bfca1264db86907aef4cb19935ed9a5b2043a757259dcdb5c599372c230602f2cfc0cd8b11aa98ff17fbed91f38f07db817263fcc7c50c846715873e"
+        "8e78d060669184b2aad25d26dc7b332c3c75c4f669d3cfcb39c203e84ebaa8db61e8b28e161b2009b524c3bd8f554aaa498e7bf583b2870948b2c17bbca0dc7e"
       ]
     },
     "bearer_contrast": {
@@ -39,7 +40,8 @@
       "secret": "025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc"
     },
     "illustrative_input_digest_preimage": "illustrative transaction transcript",
-    "illustrative_input_digest": "e1d7170b89a2b6eedec90453e32b6c320dfadd590e6a6454bddec95a0e3834cd"
+    "illustrative_input_digest": "e1d7170b89a2b6eedec90453e32b6c320dfadd590e6a6454bddec95a0e3834cd",
+    "illustrative_script_digest": "e3b48916cf9e794ad1242edf3120d354cdd252057e2f685f4afef082fe9b5545"
   },
   "nut13_v3": {
     "comment": "NUT-13 v3 derivation (nuts 13.md, the v3 message): HMAC(seed, message_v3) with message_v3 = \"Cashu_KDF_HMAC_SHA256\" || u32_be(len(scope_bytes)) || scope_bytes || u64_be(counter) || type || u32_be(attempt) || type_suffix. Every type rejection samples: 0x00 the internal private key k (secret is K = k*G compressed) and 0x02 the NUMS offset u against SECP256K1_N, 0x01 the blinding factor against BLS Fr, 0x03 a self-owned leaf key with suffix u32_be(i), and 0x04 a mint quote lock key on its own per-mint quote counter, whose scope_bytes is the mint identity pubkey (mint_identity, the NUT-06 example identity) rather than a keyset id, so quote_locks below do not depend on keyset_id. Types 0x00-0x03 share the proof counter, 0x04 the quote counter. The framing is V3 only: the V2 message keeps its unframed form. Key derivation (0x00) accepts at attempts 0, 0, 0, 0 and blinding factors (0x01) at attempts 0, 3, 0, 1 for counters 0, 1, 2, 3, exercising the rejection loop. Counter 0 also carries Y = bls_hash_to_curve(raw 33 secret bytes) pinning the binary-secret hashing rule and DST across implementations.",
@@ -610,6 +612,7 @@
     "digest": "33d8def7c0f5235c150863773e105568d44d079aa2f1d59149bb72254dc6df05",
     "input_id": "a639745001afaad8964370e8ddc1406bbf14d478c6d56819f188c9b10392fe45",
     "input_digest": "7c0b3967b3b7ba4e5daa7e8ea11607cff36062d6ff24863c8bdf31ee8346f8e4",
+    "script_digest": "d522db4366f326e882d0a83986b918e3c618ced7b0a503201a5254ace168141f",
     "package": {
       "version": "nutspA",
       "transcript": "12003d0100010802000f71756f74652d6d696e742d30303031030021034b15129a9c665f37fbe9f6c80a7fe6ec0c809f34edde98d298aff94a1e8af27604000021004b01000108020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee",
@@ -627,7 +630,7 @@
       ]
     },
     "package_string": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjEyMDAzZDAxMDAwMTA4MDIwMDBmNzE3NTZmNzQ2NTJkNmQ2OTZlNzQyZDMwMzAzMDMxMDMwMDIxMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2MDQwMDAwMjEwMDRiMDEwMDAxMDgwMjAwMjEwMjI1NDZhYjBhMmRlZTlmNzk1MTBmNGUyMGE0ZTNkOWU4OTRhOTczNjEwNDdjNTk0OTAyNTczYTdlNjRmOWQ3MDEwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlIiwic3BlbmRzIjpbeyJpbnB1dCI6MCwic2VjcmV0IjoiMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2IiwibGVhZiI6IjAwMDEwMjAwMDEwMTA0MDAyMTAyZjkzMDhhMDE5MjU4YzMxMDQ5MzQ0Zjg1Zjg5ZDUyMjliNTMxYzg0NTgzNmY5OWIwODYwMWYxMTNiY2UwMzZmOSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6W119XX0",
-    "signed_string": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjEyMDAzZDAxMDAwMTA4MDIwMDBmNzE3NTZmNzQ2NTJkNmQ2OTZlNzQyZDMwMzAzMDMxMDMwMDIxMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2MDQwMDAwMjEwMDRiMDEwMDAxMDgwMjAwMjEwMjI1NDZhYjBhMmRlZTlmNzk1MTBmNGUyMGE0ZTNkOWU4OTRhOTczNjEwNDdjNTk0OTAyNTczYTdlNjRmOWQ3MDEwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlIiwic3BlbmRzIjpbeyJpbnB1dCI6MCwic2VjcmV0IjoiMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2IiwibGVhZiI6IjAwMDEwMjAwMDEwMTA0MDAyMTAyZjkzMDhhMDE5MjU4YzMxMDQ5MzQ0Zjg1Zjg5ZDUyMjliNTMxYzg0NTgzNmY5OWIwODYwMWYxMTNiY2UwMzZmOSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6WyJiMDY1NmRiZGUxNDNiZDY4MjVlMTQxNTUxY2FlNjhmMTQyOGE2MmVlMWQ3NGMwZjhkZjhmNzM1ZDU4NDE0NzFkNmYyMGYzOTQ2NjU4YmRhZDIyNWI2YjMwZGM5MGNlYTk1NmEwYWVkZTEzMmVkZjZlYjE0MTVmOTVhZmIzMGNhMiJdfV19",
+    "signed_string": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjEyMDAzZDAxMDAwMTA4MDIwMDBmNzE3NTZmNzQ2NTJkNmQ2OTZlNzQyZDMwMzAzMDMxMDMwMDIxMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2MDQwMDAwMjEwMDRiMDEwMDAxMDgwMjAwMjEwMjI1NDZhYjBhMmRlZTlmNzk1MTBmNGUyMGE0ZTNkOWU4OTRhOTczNjEwNDdjNTk0OTAyNTczYTdlNjRmOWQ3MDEwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlIiwic3BlbmRzIjpbeyJpbnB1dCI6MCwic2VjcmV0IjoiMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2IiwibGVhZiI6IjAwMDEwMjAwMDEwMTA0MDAyMTAyZjkzMDhhMDE5MjU4YzMxMDQ5MzQ0Zjg1Zjg5ZDUyMjliNTMxYzg0NTgzNmY5OWIwODYwMWYxMTNiY2UwMzZmOSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6WyI5NmNjNzg0ZDkwMzA2MzFjMDRmYWIwNTFiNDA0ZjA3MGZhNDJkY2Y4NTZmOTlmMzFkY2M0MjBiMWYzODc2YzI3ZmQzNmYzMzYwZmU5MmJhNTMyZTU0MzMwYmU5Y2JjMjZjZDZjODU4MWZlYzRmZjRlMmJhNjVkZmE1Y2U3Y2QzYyJdfV19",
     "witness": {
       "leaf": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
       "control": {
@@ -635,7 +638,7 @@
         "path": []
       },
       "signatures": [
-        "b0656dbde143bd6825e141551cae68f1428a62ee1d74c0f8df8f735d5841471d6f20f3946658bdad225b6b30dc90cea956a0aede132edf6eb1415f95afb30ca2"
+        "96cc784d9030631c04fab051b404f070fa42dcf856f99f31dcc420b1f3876c27fd36f3360fe92ba532e54330be9cbc26cd6c8581fec4ff4e2ba65dfa5ce7cd3c"
       ]
     }
   },

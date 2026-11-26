@@ -37,6 +37,7 @@ import {
   nutrootBranchHash,
   nutrootMerkleRoot,
   nutrootMerklePath,
+  nutrootScriptDigest,
   nutrootRootFromPath,
   nutrootTweak,
   nutrootTweakPubkey,
@@ -45,6 +46,7 @@ import {
   NUTROOT_LEAF_TAG,
   NUTROOT_BRANCH_TAG,
   NUTROOT_TWEAK_TAG,
+  NUTROOT_SCRIPT_TAG,
   type NutrootConditionLeaf,
   selectRequiredLeafSignatures,
 } from '../../src/crypto/nutroot';
@@ -62,7 +64,12 @@ const negate = (priv: string) =>
 describe('tagged hashes', () => {
   test('match the @noble/curves oracle for the Cashu tags', () => {
     const msg = utf8ToBytes('cross-check message');
-    for (const tag of [NUTROOT_LEAF_TAG, NUTROOT_BRANCH_TAG, NUTROOT_TWEAK_TAG]) {
+    for (const tag of [
+      NUTROOT_LEAF_TAG,
+      NUTROOT_BRANCH_TAG,
+      NUTROOT_TWEAK_TAG,
+      NUTROOT_SCRIPT_TAG,
+    ]) {
       expect(bytesToHex(taggedHash(tag, msg))).toBe(bytesToHex(schnorr.utils.taggedHash(tag, msg)));
     }
   });
@@ -71,6 +78,7 @@ describe('tagged hashes', () => {
     expect(vectors.tags.leaf).toBe(NUTROOT_LEAF_TAG);
     expect(vectors.tags.branch).toBe(NUTROOT_BRANCH_TAG);
     expect(vectors.tags.tweak).toBe(NUTROOT_TWEAK_TAG);
+    expect(vectors.tags.script).toBe(NUTROOT_SCRIPT_TAG);
   });
 });
 
@@ -491,12 +499,13 @@ describe('tweak math (vectors)', () => {
 
   test('script-path witness signatures verify (vectors)', () => {
     const sig61 = hexToBytes(vRefund.scriptpath_witness.signatures[0]);
+    const scriptDigest = nutrootScriptDigest(
+      hexToBytes(vRefund.illustrative_input_digest),
+      hexToBytes(vRefund.scriptpath_witness.leaf),
+    );
+    expect(bytesToHex(scriptDigest)).toBe(vRefund.illustrative_script_digest);
     expect(
-      schnorr.verify(
-        sig61,
-        hexToBytes(vRefund.illustrative_input_digest),
-        hexToBytes(vRefund.alice_refund_pub).subarray(1),
-      ),
+      schnorr.verify(sig61, scriptDigest, hexToBytes(vRefund.alice_refund_pub).subarray(1)),
     ).toBe(true);
   });
 });
@@ -622,7 +631,7 @@ describe('locked secret construction and spend info cascade', () => {
   });
 
   test('selectLeafSignatures keeps one valid signature per key, dropping duplicates and extras', () => {
-    const digest = hexToBytes(vRefund.illustrative_input_digest);
+    const digest = hexToBytes(vRefund.illustrative_script_digest);
     const leaf: NutrootLeaf = {
       type: 'after',
       n: 1,
