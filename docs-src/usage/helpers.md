@@ -23,8 +23,8 @@ normalizeMintUrl('ftp://mint.example.com'); // throws CTSError
 The two hash primitives the protocol's byte-level constructions are built on, exported so
 verifiers do not need a hash library of their own. `sha256` takes raw bytes; for UTF-8
 message strings use `computeMessageDigest` instead. `taggedHash` is the BIP340
-construction, `SHA256(SHA256(tag) || SHA256(tag) || messages)`, the one NUT-10 uses for
-leaf, branch, tweak and input-digest hashing.
+construction, `SHA256(SHA256(tag) || SHA256(tag) || messages)`, the one NUT-00 and NUT-10 use for
+input digest, leaf, branch, tweak and script digest hashing.
 
 The example hashes a serialized condition leaf as NUT-10 does:
 

@@ -10,7 +10,13 @@ import {
   hasP2PKSignedProof,
   parseWitnessData,
 } from '../crypto/NUT11';
-import { nutrootScriptDigest, parseNutrootLeaf, serializeNutrootLeafHex } from '../crypto/nutroot';
+import {
+  isConditionLeaf,
+  nutrootScriptDigest,
+  parseNutrootLeafHex,
+  serializeNutrootLeafHex,
+  type NutrootLeaf,
+} from '../crypto/nutroot';
 import { inputDigest, transcriptContainers } from '../crypto/transcript';
 import { bytesToHex, hexToBytes } from '../utils';
 import type { MintProofsConfig, ScriptPathPlan, SpendOption } from '../wallet/types';
@@ -125,7 +131,8 @@ export type CashuNip07Api = {
    * Takes the private key, which a page never has: this is the extension's side of the contract,
    * not a substitute for calling the extension. Refuses any message that is not a well-formed
    * transcript carrying the container, so an event id (or anything else) can never pass through it.
-   * With `leafHex` (a script-path spend) it signs that leaf's script digest.
+   * With `leafHex` (a script-path spend) it signs that leaf's script digest, and refuses a leaf
+   * that does not list its key.
    */
   signTransaction(
     messageHex: string,
@@ -296,28 +303,28 @@ export const CashuNip07: CashuNip07Api = {
     } catch {
       throw new CTSError('Refusing to sign: not a Cashu transaction message');
     }
-    // The signed value is the input digest, derived here rather than trusted: the container must
-    // be a record of the transcript this message carries, or the signature covers nothing real.
+    // The signed value is derived here rather than trusted: the container must be a record of the
+    // transcript this message carries, or the signature covers nothing real.
     const container = hexToBytes(inputContainerHex);
     if (!records.some((record) => equalBytes(record, container))) {
       throw new CTSError('Refusing to sign: input container is not part of this transaction');
     }
+    const key = typeof secretKey === 'string' ? hexToBytes(secretKey) : secretKey;
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(key).subarray(1));
     let hash = inputDigest(sha256(message), container);
     if (leafHex !== undefined) {
-      const leaf = hexToBytes(leafHex);
+      let leaf: NutrootLeaf;
       try {
-        parseNutrootLeaf(leaf);
+        leaf = parseNutrootLeafHex(leafHex);
       } catch {
         throw new CTSError('Refusing to sign: not a nutroot leaf');
       }
+      if (!isConditionLeaf(leaf) || !leaf.keys.some((k) => xOnly(k) === pubkey)) {
+        throw new CTSError('Refusing to sign: the leaf does not list this key');
+      }
       // NUT-10: script-path signatures sign the script digest, which binds the revealed leaf.
-      hash = nutrootScriptDigest(hash, leaf);
+      hash = nutrootScriptDigest(hash, hexToBytes(leafHex));
     }
-    const key = typeof secretKey === 'string' ? hexToBytes(secretKey) : secretKey;
-    return {
-      hash: bytesToHex(hash),
-      sig: schnorrSignDigest(hash, key),
-      pubkey: bytesToHex(getPubKeyFromPrivKey(key).subarray(1)),
-    };
+    return { hash: bytesToHex(hash), sig: schnorrSignDigest(hash, key), pubkey };
   },
 };
