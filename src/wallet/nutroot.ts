@@ -17,6 +17,7 @@ import {
   recoverReceiverKeyedSecretKey,
   selectRequiredLeafSignatures,
   nutrootLeafHash,
+  nutrootScriptDigest,
   nutrootMerkleRoot,
   nutrootTweakSeckey,
   verifyNutrootSpendInfo,
@@ -125,7 +126,9 @@ export async function attachTransactionWitnesses(
     if (!input) {
       fail('Script path plan names a secret not in this transaction', state.logger);
     }
-    const { digest, inputContainer } = inputContexts.get(Ys.get(input.secret)!)!;
+    const { digest: inputDigest, inputContainer } = inputContexts.get(Ys.get(input.secret)!)!;
+    // NUT-10: script-path signatures sign the script digest, which binds the revealed leaf.
+    const digest = nutrootScriptDigest(inputDigest, hexToBytes(spend.tree[spend.leafIndex]));
     const mine = spend.keys.map((k: string) => schnorrSignDigest(digest, k));
     // The co-signer sees the digest only now, which is why it is a hook and not a signature the
     // caller could have supplied up front: the digest covers the outputs, and those are only

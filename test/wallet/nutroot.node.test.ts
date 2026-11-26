@@ -8,7 +8,9 @@ import { hashToCurveHex } from '../../src/crypto/curves';
 import {
   buildNutrootSecret,
   deriveReceiverKeyedSecret,
+  nutrootScriptDigest,
   nutrootTweakPubkey,
+  serializeNutrootLeaf,
   type NutrootLeaf,
   type NutrootConditionLeaf,
 } from '../../src/crypto/nutroot';
@@ -427,7 +429,10 @@ describe('attachTransactionWitnesses', () => {
     expect(w.leaf).toBe(tree.tree[1]);
     expect(w.control.path).toHaveLength(1);
     expect(w.preimage).toBe(preimage);
-    const digest = digestOf([proof], undefined, proof.secret);
+    const digest = nutrootScriptDigest(
+      digestOf([proof], undefined, proof.secret),
+      hexToBytes(w.leaf),
+    );
     expect(schnorr.verify(hexToBytes(w.signatures[0]), digest, hexToBytes(PUB_B).subarray(1))).toBe(
       true,
     );
@@ -526,11 +531,11 @@ describe('attachTransactionWitnesses', () => {
     expect(witness.leaf).toBe(built.tree[0]);
     expect(witness.control.K).toBe(PUB_A);
     expect(witness.signatures).toHaveLength(1);
-    // The signature is by the leaf key over this transaction's digest (NUT-10 script path).
+    // The signature is by the leaf key over the leaf's script digest (NUT-10 script path).
     expect(
       schnorr.verify(
         hexToBytes(witness.signatures[0]),
-        digestOf([input]),
+        nutrootScriptDigest(digestOf([input]), hexToBytes(witness.leaf)),
         hexToBytes(PUB_B).subarray(1),
       ),
     ).toBe(true);
@@ -558,12 +563,39 @@ describe('attachTransactionWitnesses', () => {
     );
     expect((seen!.leaf as NutrootConditionLeaf).keys).toEqual([PUB_A, PUB_B]);
     expect(bytesToHex(seen!.transactionMessage)).toContain(bytesToHex(seen!.inputContainer));
-    // digest = tagged_hash(input tag, SHA256(message) || SHA256(container)): recomputable, so a
-    // signer can refuse anything it cannot verify.
-    expect(bytesToHex(inputDigest(sha256(seen!.transactionMessage), seen!.inputContainer))).toBe(
-      bytesToHex(seen!.digest),
+    // The script digest is recomputable from the message, the container and the leaf, so a signer
+    // can refuse anything it cannot verify.
+    const recomputed = nutrootScriptDigest(
+      inputDigest(sha256(seen!.transactionMessage), seen!.inputContainer),
+      serializeNutrootLeaf(seen!.leaf),
     );
-    expect(bytesToHex(seen!.digest)).toBe(bytesToHex(digestOf([input])));
+    expect(bytesToHex(recomputed)).toBe(bytesToHex(seen!.digest));
+    expect(bytesToHex(seen!.digest)).toBe(
+      bytesToHex(nutrootScriptDigest(digestOf([input]), hexToBytes(built.tree[0]))),
+    );
+  });
+
+  test('a script path signature is valid for its own leaf only', async () => {
+    const leaves: NutrootLeaf[] = [
+      { type: 'after', n: 1, keys: [PUB_B], time: 1 },
+      { type: 'threshold', n: 1, keys: [PUB_B] },
+    ];
+    const built = buildNutrootSecret(PUB_A, leaves);
+    const spend = async (signedLeaf: number) => {
+      const input = v3Proof(built.secret, { k: PRIV_A, tree: built.tree });
+      const forLeaf = nutrootScriptDigest(digestOf([input]), hexToBytes(built.tree[signedLeaf]));
+      const cosign = () => Promise.resolve([bytesToHex(schnorr.sign(forLeaf, hexToBytes(PRIV_B)))]);
+      await attachTransactionWitnesses(
+        { inputs: [input], outputs: [OUTPUT] },
+        undefined,
+        undefined,
+        prepareScriptPathSpends([input], [{ secret: built.secret, leafIndex: 1, cosign }], []),
+        makeState(undefined),
+      );
+      return input.witness;
+    };
+    await expect(spend(1)).resolves.toContain(built.tree[1]);
+    await expect(spend(0)).rejects.toThrow(/needs 1 valid signatures, 0 produced/);
   });
 
   test('the transcript a cosigner sees names companion inputs by Y, never by secret', async () => {

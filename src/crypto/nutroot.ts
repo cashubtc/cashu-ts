@@ -26,6 +26,7 @@ import {
 export const NUTROOT_LEAF_TAG = 'Cashu_NutrootLeaf';
 export const NUTROOT_BRANCH_TAG = 'Cashu_NutrootBranch';
 export const NUTROOT_TWEAK_TAG = 'Cashu_NutrootTweak';
+export const NUTROOT_SCRIPT_TAG = 'Cashu_NutrootScript';
 
 /**
  * Current leaf version for the declarative leaf family.
@@ -451,6 +452,17 @@ export function nutrootLeafHash(serializedLeaf: Uint8Array): Uint8Array {
 }
 
 /**
+ * The digest a script-path signature signs: `tagged_hash("Cashu_NutrootScript", input_digest ||
+ * leaf_hash)` (NUT-10).
+ */
+export function nutrootScriptDigest(
+  inputDigest: Uint8Array,
+  serializedLeaf: Uint8Array,
+): Uint8Array {
+  return taggedHash(NUTROOT_SCRIPT_TAG, inputDigest, nutrootLeafHash(serializedLeaf));
+}
+
+/**
  * Hash a branch of two child hashes, sorted pair, no left/right flags.
  */
 export function nutrootBranchHash(a: Uint8Array, b: Uint8Array): Uint8Array {
@@ -704,7 +716,7 @@ export function assertPreimageOpensLeaf(leaf: NutrootLeaf, preimage: string | un
  *
  * @remarks
  * Shape (NUT-10): `{leaf, control: {K, path}, signatures, preimage?}`. Signatures are BIP-340 over
- * the input digest by the leaf's keys; `preimage` satisfies a hashlock leaf.
+ * the script digest by the leaf's keys; `preimage` satisfies a hashlock leaf.
  */
 export function buildScriptPathWitness(
   tree: string[],

@@ -8,11 +8,11 @@ import {
   serializeTransactionPreview,
 } from '../../src';
 import { schnorrSignDigest, schnorrVerifyDigest } from '../../src/crypto';
-import { buildNutrootSecret } from '../../src/crypto/nutroot';
+import { buildNutrootSecret, nutrootScriptDigest } from '../../src/crypto/nutroot';
 import { inputBoundQuoteId, inputsForPayload } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import type { Proof } from '../../src/model/types';
-import { deriveKeysetId } from '../../src/utils';
+import { deriveKeysetId, hexToBytes } from '../../src/utils';
 import { NUT02_V3_VECTOR1_KEYS, NUT02_V3_VECTOR1_KEYSET } from '../consts';
 
 import {
@@ -978,8 +978,11 @@ describe('Wallet transactions (NUT-XX)', () => {
       blindedOutputs: bodies[0].blinded_outputs,
       meltQuoteOutput: { quoteId: 'quote-melt-0001', amount: 6 },
     });
-    const digest = [...tx.proofs.values()][0].digest;
     const witness = JSON.parse(bodies[0].proof_inputs[0].witness);
+    // NUT-10: script-path signatures sign the script digest of the revealed leaf.
+    const scriptDigest = (inputDigest: Uint8Array) =>
+      nutrootScriptDigest(inputDigest, hexToBytes(built.tree[0]));
+    const digest = scriptDigest([...tx.proofs.values()][0].digest);
     expect(witness.leaf).toBe(built.tree[0]);
     expect(witness.control.K).toBe(K);
     expect(schnorrVerifyDigest(witness.signatures[0], digest, pubkey)).toBe(true);
@@ -990,7 +993,11 @@ describe('Wallet transactions (NUT-XX)', () => {
       meltQuoteOutput: { quoteId: 'quote-melt-0001', amount: 6 },
     });
     expect(
-      schnorrVerifyDigest(witness.signatures[0], [...changed.proofs.values()][0].digest, pubkey),
+      schnorrVerifyDigest(
+        witness.signatures[0],
+        scriptDigest([...changed.proofs.values()][0].digest),
+        pubkey,
+      ),
     ).toBe(false);
   });
 

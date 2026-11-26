@@ -35,6 +35,7 @@ import {
   nutrootBranchHash,
   nutrootMerkleRoot,
   nutrootMerklePath,
+  nutrootScriptDigest,
   nutrootRootFromPath,
   nutrootTweak,
   nutrootTweakPubkey,
@@ -534,17 +535,23 @@ describe('tweak math (vectors)', () => {
 
   test('script-path witness signatures verify (vectors)', () => {
     const sig61 = hexToBytes(vRefund.scriptpath_witness.signatures[0]);
+    const scriptDigest = nutrootScriptDigest(
+      hexToBytes(vRefund.illustrative_input_digest),
+      hexToBytes(vRefund.scriptpath_witness.leaf),
+    );
+    expect(bytesToHex(scriptDigest)).toBe(vRefund.illustrative_script_digest);
     expect(
-      schnorr.verify(
-        sig61,
-        hexToBytes(vRefund.illustrative_input_digest),
-        hexToBytes(vRefund.alice_refund_pub).subarray(1),
-      ),
+      schnorr.verify(sig61, scriptDigest, hexToBytes(vRefund.alice_refund_pub).subarray(1)),
     ).toBe(true);
+    const escrowDigest = nutrootScriptDigest(
+      hexToBytes(vEscrow.input_digest),
+      hexToBytes(escrowWitness.leaf),
+    );
+    expect(bytesToHex(escrowDigest)).toBe(vEscrow.script_digest);
     expect(
       schnorr.verify(
         hexToBytes(escrowWitness.signatures[0]),
-        hexToBytes(vEscrow.input_digest),
+        escrowDigest,
         hexToBytes(vEscrow.arbiter).subarray(1),
       ),
     ).toBe(true);
@@ -683,7 +690,7 @@ describe('locked secret construction and spend info cascade', () => {
   });
 
   test('selectLeafSignatures keeps one valid signature per key, dropping duplicates and extras', () => {
-    const digest = hexToBytes(vRefund.illustrative_input_digest);
+    const digest = hexToBytes(vRefund.illustrative_script_digest);
     const leaf: NutrootLeaf = {
       type: 'after',
       n: 1,
