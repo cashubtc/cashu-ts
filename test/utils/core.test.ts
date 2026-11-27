@@ -2767,6 +2767,20 @@ describe('verifyReceivedProofs: v3 spend info cascade', () => {
     });
     expect(invalid[0].error.message).toMatch(/does not match the proof secret.*keyset 02ab/);
   });
+
+  test('spend info naming none of the fields has nothing to reconstruct', async () => {
+    const proof: Proof = {
+      id: `02${'ab'.repeat(32)}`,
+      amount: Amount.from(1),
+      secret: bytesToHex(secp256k1.getPublicKey(hexToBytes('11'.repeat(32)), true)),
+      C: '00'.repeat(48),
+      spend_info: {},
+    };
+    const { invalid } = await utils.verifyReceivedProofs([proof], () => {
+      throw new Error('keyset lookup reached');
+    });
+    expect(invalid[0].error.message).toBe('keyset lookup reached');
+  });
 });
 
 describe('nutroot proof helpers', () => {
