@@ -66,6 +66,16 @@ if (melt) {
 }
 ```
 
+## Warn on demo mints
+
+`info.demo` is `true` when the mint says its ecash is not backed by real funds, for example one running a fake or regtest backend. Warn the user before they use such a mint. The library also logs a warning each time it reads such a mint's info.
+
+```ts
+if (info.demo) {
+  console.warn('Demo mint: this ecash has no real value');
+}
+```
+
 ## Work offline from a stored response
 
 `MintInfo` does not need a live connection: its constructor accepts any persisted

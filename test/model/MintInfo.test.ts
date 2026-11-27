@@ -1020,6 +1020,37 @@ describe('MintInfo max_array_length (NUT-06)', () => {
   );
 });
 
+describe('MintInfo demo (NUT-06)', () => {
+  function mockLogger() {
+    return {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+  }
+
+  it('reports a demo mint and warns', () => {
+    const logger = mockLogger();
+    const info = new MintInfo({ ...MINTINFORESP, demo: true }, logger);
+    expect(info.demo).toBe(true);
+    expect(info.cache.demo).toBe(true);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('not backed by real funds'));
+  });
+
+  it.each([undefined, false, 'true' as unknown as boolean, 1 as unknown as boolean])(
+    'is false and silent unless the mint sends true (%s)',
+    (demo) => {
+      const logger = mockLogger();
+      const info = new MintInfo({ ...MINTINFORESP, demo }, logger);
+      expect(info.demo).toBe(false);
+      expect(logger.warn).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe('MintInfo NUT-06 informational fields', () => {
   it('exposes urls, time, tos_url and icon_url and preserves them in cache', () => {
     const urls = ['https://mint.host', 'http://mint.onion'];
