@@ -22,6 +22,7 @@ import {
   type MintKeyset,
   type MeltPreview,
   Amount,
+  attachHTLCPreimage,
   createHTLCHash,
   createHTLCsecret,
   deserializeMeltPreview,
@@ -105,22 +106,13 @@ describe('melt proofs', () => {
     expect(/[0-9a-f]{64}/.test(response.change[0].secret)).toBe(true);
   });
 
-  test('melt with a preimage stamps the HTLC inputs', async () => {
-    let inputs: Array<{ witness?: string }> = [];
+  test('melt refuses to reveal a hashlock preimage', async () => {
+    // NUT-05: a hashlock proof is swapped before melting.
+    let posted = false;
     server.use(
-      http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
-        ({ inputs } = (await request.json()) as { inputs: Array<{ witness?: string }> });
-        return HttpResponse.json({
-          quote: 'test_melt_quote',
-          amount: 10,
-          unit: 'sat',
-          fee_reserve: 3,
-          state: MeltQuoteState.PAID,
-          expiry: 1234567890,
-          payment_preimage: 'preimage',
-          request: 'bolt11request',
-          change: [],
-        });
+      http.post(mintUrl + '/v1/melt/bolt11', () => {
+        posted = true;
+        return HttpResponse.json({});
       }),
     );
     const wallet = new Wallet(mint, { unit, logger });
@@ -140,10 +132,25 @@ describe('melt proofs', () => {
     const locked: Proof[] = [
       { id: '00bd033559de27d0', amount: Amount.from(13), secret: createHTLCsecret(hash), C: 'C1' },
     ];
-    const response = await wallet.meltProofsBolt11(meltQuote, locked, { preimage });
-
-    expect(response.quote.state).toBe(MeltQuoteState.PAID);
-    expect(JSON.parse(inputs[0].witness!)).toEqual({ preimage });
+    // A legacy HTLC input whose witness already carries the preimage.
+    await expect(
+      wallet.meltProofsBolt11(meltQuote, attachHTLCPreimage(locked, preimage)),
+    ).rejects.toThrow(/swap the proof first/);
+    // A script path plan through a hashlock leaf.
+    const plan = { secret: locked[0].secret, leafIndex: 0, preimage };
+    await expect(
+      wallet.meltProofsBolt11(meltQuote, locked, { scriptPath: [plan] }),
+    ).rejects.toThrow(/swap the proof first/);
+    // A plain JS caller still passing the removed `preimage` option.
+    await expect(wallet.meltProofsBolt11(meltQuote, locked, { preimage } as any)).rejects.toThrow(
+      /swap the proof first/,
+    );
+    // The same plan handed straight to completeMelt.
+    const preview = await wallet.prepareMelt('bolt11', meltQuote, locked);
+    await expect(wallet.completeMelt(preview, undefined, { scriptPath: [plan] })).rejects.toThrow(
+      /swap the proof first/,
+    );
+    expect(posted).toBe(false);
   });
 
   test('test melt proofs no change', async () => {

@@ -1093,16 +1093,6 @@ export class MeltBuilder<
   }
 
   /**
-   * NUT-14: preimage for HTLC inputs, placed on their witness before signing.
-   *
-   * @param preimage 64 hex characters.
-   */
-  preimage(preimage: string) {
-    this.config.preimage = preimage;
-    return this;
-  }
-
-  /**
    * Receive a callback once counters are atomically reserved for deterministic outputs.
    *
    * @param cb Called with OperationCounters when counters are reserved.
@@ -1220,16 +1210,6 @@ export class MeltOnchainBuilder {
    */
   scriptPath(plans: ScriptPathPlan[]) {
     this.config.scriptPath = plans;
-    return this;
-  }
-
-  /**
-   * NUT-14: preimage for HTLC inputs, placed on their witness before signing.
-   *
-   * @param preimage 64 hex characters.
-   */
-  preimage(preimage: string) {
-    this.config.preimage = preimage;
     return this;
   }
 

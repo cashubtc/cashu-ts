@@ -273,6 +273,23 @@ await wallet.meltProofsBolt11(quote, proofs);
 
 ---
 
+## Melt refuses a hashlock spend
+
+A melt can fail and return its inputs to unspent after the mint has published their witnesses, so NUT-05 asks a wallet to swap a hashlock proof before melting it. v5 refuses the direct melt: an HTLC input whose witness carries a preimage, or a v3 script path plan through a hashlock leaf, throws before anything is sent. The melt config and builders take no `preimage`.
+
+### Migration
+
+Swap the proof first, then melt the result:
+
+```ts
+const unlocked = await wallet.receive(lockedProofs, { privkey, preimage });
+await wallet.meltProofsBolt11(quote, unlocked);
+```
+
+An HTLC's refund path carries no preimage and melts as before.
+
+---
+
 ## Melt change failures now throw `MeltChangeError`
 
 `completeMelt` builds NUT-08 change after the mint has spent the inputs. When that step fails (the change keyset's keys will not load, or the signatures do not check out), v4 threw the underlying error and the caller was left with nothing to rebuild from, since the convenience melts never expose the `MeltPreview`. v5 throws `MeltChangeError` instead, carrying the blank `outputData`, the merged `quote`, and the original failure as `cause`.

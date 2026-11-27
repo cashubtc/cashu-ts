@@ -1217,12 +1217,6 @@ describe('WalletOps builders', () => {
   // --------------------------- MeltBuilder -----------------------------------
 
   describe('MeltBuilder', () => {
-    it('passes the preimage in the config', async () => {
-      await ops.meltBolt11(melt11, proofs).preimage('bb'.repeat(32)).prepare();
-      const [, , , cfg] = wallet.prepareMelt.mock.calls[0];
-      expect(cfg).toMatchObject({ preimage: 'bb'.repeat(32) });
-    });
-
     it('supports wallet.prepareMelt', async () => {
       const cb = vi.fn();
       await ops
@@ -1389,12 +1383,6 @@ describe('WalletOps builders', () => {
   // --------------------------- MeltOnchainBuilder ----------------------------
 
   describe('MeltOnchainBuilder', () => {
-    it('passes the preimage in the config', async () => {
-      await ops.meltOnchain(meltOnchainSingle, proofs).preimage('dd'.repeat(32)).run();
-      const [, , , cfg] = wallet.meltProofsOnchain.mock.calls[0];
-      expect(cfg).toMatchObject({ preimage: 'dd'.repeat(32) });
-    });
-
     it('auto-selects the only fee option when no feeIndex is set', async () => {
       await ops.meltOnchain(meltOnchainSingle, proofs).privkey('sk').run();
 
