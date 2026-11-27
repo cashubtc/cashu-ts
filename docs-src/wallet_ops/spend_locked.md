@@ -24,7 +24,7 @@ Two stateless helpers dispatch on this without a wallet: `isBlsProof(proof)` gat
 
 ## Inspecting: `wallet.spendOptions()`
 
-Reports what this wallet can do with each proof, one result per proof in input order. Offline (apart from a counter lookup) and changes nothing; use it to triage received proofs, pick a leaf for a script path plan, or show a user why a proof is stuck. Safely handles legacy P2PK/HTLC proofs too.
+Reports what this wallet can do with each proof, one result per proof in input order. Offline and changes nothing; use it to triage received proofs, pick a leaf for a script path plan, or show a user why a proof is stuck. Safely handles legacy P2PK/HTLC proofs too.
 
 ```ts
 const [{ spendable, blockedBy, keyPath, script }] = wallet.spendOptions([proof], {
@@ -35,19 +35,42 @@ const [{ spendable, blockedBy, keyPath, script }] = wallet.spendOptions([proof],
 // spendable: the key path or some leaf spends it from what this wallet holds
 // blockedBy: when not, why: 'not-keyed-to-you' | 'locktime' (see availableAt) | 'threshold' | 'preimage'
 // keyPath: true when a key-path key is recoverable (bearer k or matched E)
+// keyPathHeldBy: who can sign the key path: 'you' | 'bearer' | 'other' | 'nobody'
+// othersCanSpendAt: unix seconds from which another party can spend without you (0: now)
 // script: one entry per disclosed leaf, in tree order:
 //   { leafIndex, leaf, keys, satisfiable, blockedBy?, availableAt? }
 ```
 
 `spendable` and `blockedBy` are the one-line answer, worded for the caller to phrase: `'locktime'` only when a leaf this wallet covers is merely waiting (a stranger's refund leaf is `'not-keyed-to-you'`), `'threshold'` when it holds some but not enough keys, `'not-keyed-to-you'` when none. Per leaf, `satisfiable` is this wallet's own assessment from what it holds and `blockedBy` names the first obstacle: `'locktime'` (see `availableAt`), `'threshold'` (key shortfall), or `'preimage'` (a hashlock leaf whose keys are covered; the preimage comes from the caller, so a hashlock leaf is never satisfiable from the wallet alone). The mint judges an `after` leaf against its own clock, so a leaf that unlocked seconds ago may still be refused. A leaf the wallet cannot parse throws rather than reporting as spendable, the same fail-closed rule the receive cascade applies. A disclosed v3 tree must reconstruct the proof secret before its leaves are evaluated; mismatched metadata or an internal key that is neither disclosed nor recoverable throws.
 
-A legacy proof reports in the same shape. A NUT-11 P2PK or HTLC lock reads as a main leaf (`threshold` or `hashlock`) and, given a locktime, its refund path as an `after` leaf at index 1; keys match across parity, so an x-only import (any nostr key) is found under either prefix, and a blinded (P2BK) key through `p2pk_e`. An unlocked bearer proof is `keyPath: true` with no leaves. An unknown NUT-10 kind throws. So a wallet receiving mixed proofs asks one question of each, with no `isBlsKeyset` branch of its own.
+A legacy proof reports in the same shape. A NUT-11 P2PK or HTLC lock reads as a main leaf (`threshold` or `hashlock`) and, given a locktime, its refund path as an `after` leaf at index 1; keys match across parity, so an x-only import (any nostr key) is found under either prefix, and a blinded (P2BK) key through `p2pk_e`. An unlocked bearer proof is `keyPath: true` with no leaves, since it spends with no witness at all. An unknown NUT-10 kind throws, as does a malformed NUT-10 secret or NUT-11 tag (a non-integer `n_sigs`, or a scalar tag with more than one value), and a v3 keyset proof whose secret is not a point. So a wallet receiving mixed proofs asks one question of each, with no `isBlsKeyset` branch of its own.
 
 Triage a whole token in one call rather than proof by proof: each supplied key's public key is derived once per call. Proofs keyed through an ephemeral (receiver-keyed, a blinded leaf key, or legacy P2BK) are still matched one by one, at an ECDH per supplied key (NUT-28), so a wallet holding many static keys pays for each of them on every such proof.
 
 ```ts
 const options = wallet.spendOptions(proofs, { privkeys: [myStaticPrivkey] });
 const canReceive = options.every((o) => o.spendable);
+```
+
+`spendable` says you can spend a proof, not that you alone can. Two fields report who else can, for a wallet that keeps a proof instead of swapping it (eg an offline receive):
+
+- `othersCanSpendAt`: unix seconds from which another party can spend without you. `0` means now: a key path someone else holds, or a leaf they can satisfy that has no locktime (including a hashlock, whose preimage may already be known). Otherwise it is the earliest `after` leaf they can satisfy. Absent when nobody else is known to: see the bearer note below.
+- `keyPathHeldBy`: `'you'` for a receiver-keyed proof matched to one of your keys, `'bearer'` for a `k` that travels with the proof or an unlocked pre-v3 secret, `'other'` for a key not derived from the keys you passed, `'nobody'` for a NUMS key or a legacy lock. `'other'` is judged from `privkeys` alone: a receiver-keyed proof checked without its key, or an aggregated key you cosign, also reads as `'other'`.
+
+A bearer proof spends for whoever has it, and only you know where a proof came from, so `'bearer'` does not count towards `othersCanSpendAt`: a received bearer proof is its sender's to race until you swap it.
+
+The policy is yours. A wallet that swaps on receive needs neither field; one that holds a received proof might require sole control up to its own horizon:
+
+```ts
+const horizon = Math.floor(Date.now() / 1000) + 3600;
+const safeToHold = wallet
+  .spendOptions(proofs, { privkeys: [myStaticPrivkey] })
+  .every(
+    (o) =>
+      o.spendable &&
+      o.keyPathHeldBy !== 'bearer' &&
+      (o.othersCanSpendAt === undefined || o.othersCanSpendAt >= horizon),
+  );
 ```
 
 ## Key path: receiving is the sweep

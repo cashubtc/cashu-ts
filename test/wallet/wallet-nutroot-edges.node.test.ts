@@ -17,6 +17,7 @@ import {
   NUTROOT_NUMS_KEY,
   buildNutrootSecret,
   deriveReceiverKeyedSecret,
+  numsOffsetKey,
   serializeNutrootLeafHex,
   type NutrootLeaf,
 } from '../../src/crypto/nutroot';
@@ -412,6 +413,22 @@ describe('nutroot edge cases', () => {
     const unlisted = loaded(['0002']);
     expect(unlisted).toMatchObject({ spendable: false, blockedBy: 'unlisted' });
     expect(unlisted.script[0]).toMatchObject({ satisfiable: false, blockedBy: 'unlisted' });
+    // The same holds for other parties: an unlisted leaf opens nothing to a stranger either.
+    // A script-only proof, so no key path stands in for the leaf.
+    const u = 'ab'.repeat(32);
+    const K = bytesToHex(numsOffsetKey(hexToBytes(u)));
+    const nums = buildNutrootSecret(K, [{ type: 'threshold', n: 1, keys: [pub(1)] }]);
+    const scriptOnly = { ...proof, secret: nums.secret, spend_info: { K, u, tree: nums.tree } };
+    const stranger = (leaves: string[]) => {
+      const w = new Wallet(mintUrl);
+      w.loadMintFromCache(
+        { ...mintInfo, nuts: { ...mintInfo.nuts, '10': { supported: true, leaves } } },
+        cache(),
+      );
+      return w.spendOptions([scriptOnly], { privkeys: priv(3) })[0].othersCanSpendAt;
+    };
+    expect(stranger(['0001'])).toBe(0);
+    expect(stranger(['0002'])).toBeUndefined();
     // Offline, with no mint info loaded, the leaf is judged on its keys alone.
     expect(new Wallet(mintUrl).spendOptions([proof], { privkeys: priv(1) })[0]).toMatchObject({
       spendable: true,
