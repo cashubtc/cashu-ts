@@ -2,7 +2,7 @@
 
 # Deterministic counters (persist, inspect, bump)
 
-Deterministic outputs use per-keyset counters. The wallet reserves them atomically and emits a single event you can use to persist the "next" value in your storage. A seeded wallet keeps one extra cursor per mint for quote lock keys under `quoteCounterKey(mintPubkey)` (`'mint-quote-lock:<NUT-06 pubkey>'`): it flows through the same `CounterSource` and `countersReserved` event, so persist it like any keyset counter and do not assume every counter key is a keyset id.
+Deterministic outputs use per-keyset counters. The wallet reserves them atomically and emits a single event you can use to persist the "next" value in your storage. A seeded wallet keeps one extra cursor per mint for quote lock keys under `quoteCounterKey(mintPubkey)` (`'mint-quote-lock:<NUT-06 pubkey>'`, or `'mint-quote-lock'` at a mint that publishes no pubkey): it flows through the same `CounterSource` and `countersReserved` event, so persist it like any keyset counter and do not assume every counter key is a keyset id.
 
 API at a glance:
 

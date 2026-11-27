@@ -2228,7 +2228,7 @@ export type ProofVerification<T> = {
 };
 
 // @public
-export function quoteCounterKey(mintPubkey: string): string;
+export function quoteCounterKey(mintPubkey?: string): string;
 
 // @public
 export class RateLimitError extends HttpResponseError {

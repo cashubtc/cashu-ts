@@ -4,7 +4,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { CallerAbortError, Wallet, quoteCounterKey, type OperationCounters } from '../../src';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
-import { deriveQuoteLockKey } from '../../src/crypto/NUT13';
+import { deriveKeyPair, deriveQuoteLockKey } from '../../src/crypto/NUT13';
 import { Amount } from '../../src/model/Amount';
 import type { Proof } from '../../src/model/types';
 
@@ -93,15 +93,21 @@ describe('Wallet quote lock keys', () => {
     expect(bytesToHex(deriveQuoteLockKey(SEED, MINT_PUBKEY, 0))).toBe(first.privkey);
   });
 
-  test('a seeded wallet refuses to derive at a mint with no NUT-06 pubkey unless random', async () => {
+  test('a seeded wallet uses the NUT-20 path at a mint with no NUT-06 pubkey', async () => {
     const { pubkey: _dropped, ...unidentified } = mintInfoResp;
     server.use(http.get(mintUrl + '/v1/info', () => HttpResponse.json(unidentified)));
     const wallet = new Wallet(mintUrl, { unit: 'sat', bip39seed: SEED });
     await wallet.loadMint();
-    await expect(wallet.createQuoteLockKey()).rejects.toThrow(/publishes no NUT-06 pubkey/);
-    await expect(wallet.recoverQuoteLockKey(POINT)).rejects.toThrow(/publishes no NUT-06 pubkey/);
-    const { pubkey, privkey } = await wallet.createQuoteLockKey({ random: true });
-    expect(bytesToHex(getPubKeyFromPrivKey(hexToBytes(privkey)))).toBe(pubkey);
+    const seen: OperationCounters[] = [];
+    wallet.on.countersReserved((p) => seen.push(p));
+    expect(await wallet.createQuoteLockKey()).toEqual(deriveKeyPair(SEED, 'QuoteLock', 0));
+    expect(await wallet.createQuoteLockKey()).toEqual(deriveKeyPair(SEED, 'QuoteLock', 1));
+    // One cursor for the path, apart from any mint's own.
+    expect(quoteCounterKey()).toBe('mint-quote-lock');
+    expect(seen.map((p) => p.counterKey)).toEqual([quoteCounterKey(), quoteCounterKey()]);
+    const lost = deriveKeyPair(SEED, 'QuoteLock', 4);
+    await expect(wallet.recoverQuoteLockKey(lost.pubkey)).resolves.toBe(lost.privkey);
+    expect(await wallet.counters.peekNext(quoteCounterKey())).toBe(5);
   });
 
   test('recoverQuoteLockKey scans the seed to the quote pubkey, and misses cleanly', async () => {

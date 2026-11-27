@@ -3127,9 +3127,8 @@ class Wallet {
    * Derived keys are recoverable via {@link Wallet.recoverQuoteLockKey | recoverQuoteLockKey};
    * random ones exist only in the returned object, so persist the key with its quote. `{ random:
    * true }` forces a random key on a seeded wallet, consuming no counter: for throwaway quotes (eg
-   * estimation) that must not pollute the recovery scan, or for a mint that publishes no NUT-06
-   * `pubkey` to scope the derivation to.
-   * @throws {@link CTSError} On a seeded wallet whose mint publishes no `pubkey`, unless `random`.
+   * estimation) that must not pollute the recovery scan. At a mint that publishes no NUT-06
+   * `pubkey`, a seeded wallet derives on the NUT-20 BIP-32 path instead.
    * @experimental Seed derivation follows draft NUT-13 type `0x04` and draft NUT-06 identity
    *   scoping and may change before GA; a key derived now may then no longer be found by scan, so
    *   persist the `privkey` with its quote.
@@ -3138,9 +3137,9 @@ class Wallet {
     random?: boolean;
   }): Promise<{ pubkey: string; privkey: string }> {
     const seed = opts?.random ? undefined : this._seed;
-    const mintPubkey = seed ? this.requireMintIdentity('createQuoteLockKey') : undefined;
+    const mintPubkey = seed ? this.mintIdentity() : undefined;
     return createQuoteLockKeyPair(seed, mintPubkey, async () => {
-      const counterKey = quoteCounterKey(mintPubkey!);
+      const counterKey = quoteCounterKey(mintPubkey);
       const range = await this._counterSource.reserve(counterKey, 1);
       // Event-persisted sources must see the quote cursor move too, or a restart
       // re-derives keys already handed out.
@@ -3164,15 +3163,15 @@ class Wallet {
    * Keys are scoped to the mint identity, not a keyset (NUT-13 type `0x04`), so a rotation cannot
    * strand the key but only this mint's quotes are found. A key found at or past the quote counter
    * moves the counter past it, reported through `countersReserved`. The scan yields every few
-   * frames; `signal` stops it with `CallerAbortError`.
-   * @throws {@link CTSError} On a seedless wallet, which has nothing to scan, or a mint with no
-   *   NUT-06 `pubkey`.
+   * frames; `signal` stops it with `CallerAbortError`. A mint with no NUT-06 `pubkey` is scanned on
+   * the NUT-20 BIP-32 path.
+   * @throws {@link CTSError} On a seedless wallet, which has nothing to scan.
    * @experimental The scan follows draft NUT-13 type `0x04` and draft NUT-06 identity scoping and
    *   may change before GA, so it finds only keys derived under the current scheme.
    */
   async recoverQuoteLockKey(pubkey: string, options?: AbortOptions): Promise<string | undefined> {
     this.failIf(!this._seed, 'recoverQuoteLockKey requires a seeded wallet');
-    const mintPubkey = this.requireMintIdentity('recoverQuoteLockKey');
+    const mintPubkey = this.mintIdentity();
     const found = await scanQuoteLockKey(pubkey, mintPubkey, this._nutrootState(), options?.signal);
     if (!found) return undefined;
     const counterKey = quoteCounterKey(mintPubkey);
@@ -3187,16 +3186,12 @@ class Wallet {
   }
 
   /**
-   * The mint's NUT-06 identity `pubkey`, which scopes quote lock derivation.
+   * The mint's NUT-06 identity `pubkey`, which scopes quote lock derivation, if it publishes one.
    */
-  private requireMintIdentity(what: string): string {
+  private mintIdentity(): string | undefined {
     // The pubkey is taken as published until mint info signatures are verified.
     const pubkey = this.getMintInfo().pubkey;
-    this.failIf(
-      !pubkey,
-      `${what}: the mint publishes no NUT-06 pubkey to scope quote lock keys to`,
-    );
-    return normalizeSecpPubkey(pubkey);
+    return pubkey ? normalizeSecpPubkey(pubkey) : undefined;
   }
 
   /**
