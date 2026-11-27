@@ -4,6 +4,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
+import { taggedHash } from '../../src/crypto/core';
 import {
   buildNutrootSecret,
   deriveReceiverKeyedSecret,
@@ -43,10 +44,15 @@ const sk = (n: number) => {
 };
 const pub = (n: number) => bytesToHex(secp256k1.getPublicKey(sk(n), true));
 
-// A spend's input digest, recomputed independently from the package transcript (NUT-10).
+// A spend's script digest, recomputed independently from the package (NUT-10).
 function spendDigest(pkg: ScriptPathSigningPackage, i = 0): Uint8Array {
   const transcript = hexToBytes(pkg.transcript);
-  return inputDigest(sha256(transcript), transcriptContainers(transcript)[pkg.spends[i].input]);
+  const { input, leaf } = pkg.spends[i];
+  return taggedHash(
+    'Cashu_NutrootScript',
+    inputDigest(sha256(transcript), transcriptContainers(transcript)[input]),
+    nutrootLeafHash(hexToBytes(leaf)),
+  );
 }
 
 function fixture() {
@@ -221,6 +227,46 @@ describe('ScriptPath signing packages', () => {
     expect(() => ScriptPath.mergeSwapPackage(pkg, preview)).toThrow(/valid signatures/);
   });
 
+  test('each spend of a package signs its own leaf', () => {
+    const lock = (key: string): Proof => {
+      const built = buildNutrootSecret(pub(4), [{ type: 'threshold', n: 1, keys: [key] }]);
+      return {
+        id: keysetId,
+        amount: Amount.from(1),
+        secret: built.secret,
+        C: '11'.repeat(48),
+        spend_info: { K: pub(4), tree: built.tree },
+      };
+    };
+    const inputs = [lock(pub(3)), lock(pub(5))];
+    const preview: SwapPreview = {
+      amount: Amount.from(2),
+      fees: Amount.from(0),
+      sendTotal: Amount.from(0),
+      inputs,
+      keepOutputs: [OutputData.createSingleRandomData(2, keysetId)],
+    };
+    const plans = inputs.map((p) => ({ secret: p.secret, leafIndex: 0 }));
+    const pkg = ScriptPath.extractSwapPackage(preview, plans);
+    const signed = [3, 5].reduce((p, n) => ScriptPath.signPackage(p, bytesToHex(sk(n))), pkg);
+    expect(bytesToHex(spendDigest(signed, 0))).not.toBe(bytesToHex(spendDigest(signed, 1)));
+    signed.spends.forEach((spend, i) => {
+      const [key] = (parseNutrootLeaf(hexToBytes(spend.leaf)) as NutrootConditionLeaf).keys;
+      const verifies = (digest: Uint8Array) =>
+        schnorr.verify(hexToBytes(spend.signatures[0]), digest, hexToBytes(key).subarray(1));
+      expect(spend.signatures).toHaveLength(1);
+      expect(verifies(spendDigest(signed, i))).toBe(true);
+      expect(verifies(spendDigest(signed, 1 - i))).toBe(false);
+    });
+    expect(ScriptPath.mergeSwapPackage(signed, preview, plans).inputs).toHaveLength(2);
+    // One spend's signature does not complete the other.
+    const [first, second] = signed.spends;
+    const crossed = { ...signed, spends: [{ ...first, signatures: second.signatures }, second] };
+    expect(() => ScriptPath.mergeSwapPackage(crossed, preview, plans)).toThrow(
+      /needs 1 valid signatures, 0 produced/,
+    );
+  });
+
   // Each signPackage on a receiver-keyed proof trial-matches 255 blinding slots, so these
   // stay one call per test to fit slow CI runners inside the default timeout.
   test('signs a verbatim leaf key', () => {
@@ -228,7 +274,7 @@ describe('ScriptPath signing packages', () => {
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 0 }]);
     const signed = ScriptPath.signPackage(pkg, bytesToHex(sk(3)));
     expect(signed.spends[0].signatures).toHaveLength(1);
-    // The signature is BIP-340 by the leaf key over the spend's input digest (NUT-10).
+    // The signature is BIP-340 by the leaf key over the spend's script digest (NUT-10).
     expect(
       schnorr.verify(
         hexToBytes(signed.spends[0].signatures[0]),
@@ -345,7 +391,7 @@ describe('ScriptPath signing packages', () => {
     const encoded = ScriptPath.serializePackage(pkg);
     const json = bytesToUtf8(decodeBase64UrlToUint8(encoded.slice(6)));
     expect(json).not.toContain(companion.secret);
-    // The signer derives its input digest from the transcript alone.
+    // The signer derives its script digest from the package alone.
     const signed = ScriptPath.signPackage(
       ScriptPath.deserializePackage(encoded),
       bytesToHex(sk(3)),
@@ -856,12 +902,12 @@ describe('ScriptPath mint packages', () => {
 });
 
 describe('ScriptPath transport vectors', () => {
-  test('the shared nutspA vectors decode, and the signature covers the spend input digest', () => {
+  test('the shared nutspA vectors decode, and the signature covers the spend script digest', () => {
     const sp = vectors.signing_package;
     const key3 = vectors.commit_leaf.leaf_threshold.slice(-64);
     const unsigned = ScriptPath.deserializePackage(sp.package_string);
     expect(unsigned).toEqual(sp.package);
-    expect(bytesToHex(spendDigest(unsigned))).toBe(sp.input_digest);
+    expect(bytesToHex(spendDigest(unsigned))).toBe(sp.script_digest);
     const signed = ScriptPath.deserializePackage(sp.signed_string);
     const [signature] = signed.spends[0].signatures;
     expect(schnorr.verify(hexToBytes(signature), spendDigest(signed), hexToBytes(key3))).toBe(true);

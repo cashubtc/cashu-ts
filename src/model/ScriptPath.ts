@@ -12,6 +12,7 @@ import {
   enumerateLeafKeySlots,
   keyTrialCache,
   nutrootLeafHash,
+  nutrootScriptDigest,
   nutrootMerklePath,
   parseNutrootLeaf,
   readTlvRecords,
@@ -128,13 +129,15 @@ function payloadTranscript(
 }
 
 /**
- * Each spend's input digest, in spend order, derived from the package transcript alone.
+ * Each spend's script digest (NUT-10), in spend order, derived from the package alone.
  */
-function packageInputDigests(pkg: ScriptPathSigningPackage): Uint8Array[] {
+function packageScriptDigests(pkg: ScriptPathSigningPackage): Uint8Array[] {
   const transcript = hexToBytes(pkg.transcript);
   const containers = transcriptContainers(transcript);
   const digest = sha256(transcript);
-  return pkg.spends.map((spend) => inputDigest(digest, containers[spend.input]));
+  return pkg.spends.map((spend) =>
+    nutrootScriptDigest(inputDigest(digest, containers[spend.input]), hexToBytes(spend.leaf)),
+  );
 }
 
 /**
@@ -425,7 +428,7 @@ function assertSpendNamesInput(spend: ScriptPathSpendRequest, container: Uint8Ar
 
 function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage {
   const leaves = assertValidPackage(pkg);
-  const digests = packageInputDigests(pkg);
+  const digests = packageScriptDigests(pkg);
   const pub = bytesToHex(getPubKeyFromPrivKey(hexToBytes(privkey)));
   const cache = keyTrialCache();
   const spends = pkg.spends.map((spend, i) => {
@@ -479,7 +482,7 @@ function mergeMintPackage<T extends AnyMintPreview>(
 ): T {
   assertValidPackage(pkg);
   assertMatches(pkg, mintTranscript(preview));
-  const digests = packageInputDigests(pkg);
+  const digests = packageScriptDigests(pkg);
   const quotes = mintQuoteInputs(preview);
   const preimages = new Map(plans.map((p) => [p.quote, p.preimage]));
   const witnesses = pkg.spends.map((spend, i) =>
@@ -556,7 +559,7 @@ function applyWitnesses(
   inputs: Proof[],
   plans: ScriptPathPlan[] = [],
 ): Proof[] {
-  const digests = packageInputDigests(pkg);
+  const digests = packageScriptDigests(pkg);
   const preimages = new Map(plans.map((p) => [p.secret, p.preimage]));
   const witnessed = [...inputs];
   pkg.spends.forEach((spend, i) => {
