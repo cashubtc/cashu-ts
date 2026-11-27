@@ -176,9 +176,11 @@ function verifyBlsSlice(
       return;
     }
     const p = n.p;
-    if (opts.cascade && p.spend_info) {
+    const si = p.spend_info;
+    // NUT-00: spend info naming none of the fields has nothing to reconstruct.
+    if (opts.cascade && si && [si.k, si.E, si.K, si.u, si.tree].some((v) => v !== undefined)) {
       try {
-        verifyNutrootSpendInfo(p.secret, p.spend_info);
+        verifyNutrootSpendInfo(p.secret, si);
       } catch (e) {
         errors[index] = new CTSError(
           `${messageOf(e)} (keyset ${p.id}, amount ${p.amount.toString()})`,
