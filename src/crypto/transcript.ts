@@ -490,9 +490,9 @@ export function verifyTransactionInputWitness(
     const witness = JSONInt.parse(witnessJson, undefined, { strict: true }) as {
       signatures?: unknown;
     };
-    // NUT-00: a key-path witness carrying `control` or `preimage` MUST be rejected; `leaf` selects
-    // the script path (NUT-10).
-    if ('leaf' in witness || 'control' in witness || 'preimage' in witness) return false;
+    // NUT-00: a verifier MUST reject a member it does not recognize, and a key-path witness
+    // carries `signatures` alone: `leaf` selects the script path (NUT-10).
+    if (Object.keys(witness).some((member) => member !== 'signatures')) return false;
     signatures = witness.signatures;
   } catch {
     return false;

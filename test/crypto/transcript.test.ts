@@ -390,6 +390,16 @@ describe('transaction transcript (vectors)', () => {
     }
   });
 
+  test('rejects a witness carrying a member it does not recognize', () => {
+    // NUT-00: a verifier MUST reject a member it does not recognize.
+    const digest = hexToBytes(tv.swap.input_digest);
+    const secret = tv.swap.tx.proof_inputs[0].secret;
+    const valid = JSON.stringify({ signatures: [tv.swap.signature] });
+    expect(verifyTransactionInputWitness(digest, secret, valid)).toBe(true);
+    const extra = JSON.stringify({ signatures: [tv.swap.signature], note: 'x' });
+    expect(verifyTransactionInputWitness(digest, secret, extra)).toBe(false);
+  });
+
   test('rejects a witness that repeats a member', () => {
     // NUT-00: a JSON object that repeats a member name is malformed.
     const digest = hexToBytes(tv.swap.input_digest);
