@@ -1,5 +1,24 @@
 # Changelog
 
+## [5.0.0-rc.15](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.14...v5.0.0-rc.15) (2026-11-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* **wallet:** melt refuses a hashlock spend ([#1561](https://github.com/cashubtc/cashu-ts/issues/1561))
+
+### Features
+
+* **nutroot:** script-path signatures sign the NUT-10 script digest ([#1563](https://github.com/cashubtc/cashu-ts/issues/1563)) ([673f690](https://github.com/cashubtc/cashu-ts/commit/673f6903136607c9581c13bdf343ece986492ae5))
+* **wallet:** melt refuses a hashlock spend ([#1561](https://github.com/cashubtc/cashu-ts/issues/1561)) ([348ef19](https://github.com/cashubtc/cashu-ts/commit/348ef192a9c1cdea7b7276e70375103c9b05ea3c))
+* **wallet:** spendOptions reports who else can spend a proof ([#1562](https://github.com/cashubtc/cashu-ts/issues/1562)) ([b573583](https://github.com/cashubtc/cashu-ts/commit/b5735835a1baba8d20517173b70d0bea4af23548))
+
+
+### Bug Fixes
+
+* **crypto:** refuse a witness member the verifier does not recognize ([#1560](https://github.com/cashubtc/cashu-ts/issues/1560)) ([1d05189](https://github.com/cashubtc/cashu-ts/commit/1d05189cf89339c2714d5c91c98bd8675bd075cb))
+* **utils:** skip the spend info check when no field is named ([#1567](https://github.com/cashubtc/cashu-ts/issues/1567)) ([8bbe3b4](https://github.com/cashubtc/cashu-ts/commit/8bbe3b4173bcf7f947d06a10c32a1fe76466b1a9))
+
 ## [5.0.0-rc.14](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.13...v5.0.0-rc.14) (2026-11-25)
 
 
