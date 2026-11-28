@@ -42,6 +42,12 @@ export function normalizeMintKeyset(keyset: MintKeyset): MintKeyset {
       'keyset.input_fee_ppk',
       undefined,
     ),
+    active_from: normalizeSafeIntegerMetadata(keyset.active_from, 'keyset.active_from', undefined),
+    active_until: normalizeSafeIntegerMetadata(
+      keyset.active_until,
+      'keyset.active_until',
+      undefined,
+    ),
     final_expiry: normalizeSafeIntegerMetadata(
       keyset.final_expiry,
       'keyset.final_expiry',
@@ -58,6 +64,8 @@ export function normalizeMintKeys(keys: MintKeys): MintKeys {
       'keys.input_fee_ppk',
       undefined,
     ),
+    active_from: normalizeSafeIntegerMetadata(keys.active_from, 'keys.active_from', undefined),
+    active_until: normalizeSafeIntegerMetadata(keys.active_until, 'keys.active_until', undefined),
     final_expiry: normalizeSafeIntegerMetadata(keys.final_expiry, 'keys.final_expiry', undefined),
   };
 }
