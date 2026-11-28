@@ -221,20 +221,17 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
 }
 
 /**
- * Decodes all TLV parts from the data.
+ * Yields the TLV parts of the data one at a time, so a long run of records is never held at once.
  */
-function decodeAllParts(data: Uint8Array): TLVPart[] {
-  const parts: TLVPart[] = [];
+function* decodeAllParts(data: Uint8Array): Generator<TLVPart> {
   let offset = 0;
 
   while (offset < data.length) {
     const part = decodeNextPart(data.subarray(offset));
-    parts.push(part);
+    yield part;
     // Tag (1 byte) + Length (2 bytes) + Value
     offset += 1 + 2 + part.length;
   }
-
-  return parts;
 }
 
 /**

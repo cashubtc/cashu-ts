@@ -1029,9 +1029,9 @@ export function deserializeProofs(json: string | string[] | ProofLike[]): Proof[
 }
 
 /**
- * Decodes an encoded cashu payment request string into a {@link PaymentRequest}.
+ * Decodes a payment request string, or its raw binary form, into a {@link PaymentRequest}.
  */
-export function decodePaymentRequest(paymentRequest: string) {
+export function decodePaymentRequest(paymentRequest: string | Uint8Array) {
   return PaymentRequest.fromEncodedRequest(paymentRequest);
 }
 
@@ -1156,6 +1156,26 @@ export function getDecodedTokenBinary(bytes: Uint8Array, keysetIds: readonly str
   const token = decodeBinaryToken(bytes);
   token.proofs = mapShortKeysetIds(token.proofs, keysetIds);
   return token;
+}
+
+/**
+ * Converts a `cashuB` token string to a raw binary token, keeping its CBOR bytes as sent.
+ *
+ * @remarks
+ * NUT-16 requires the original bytes; {@link getEncodedTokenBinary} would re-serialize them.
+ * @internal
+ */
+export function getTokenBinaryFromString(token: string): Uint8Array {
+  const body = removePrefix(token);
+  if (body[0] !== 'B') {
+    throw new CTSError('Only cashuB (V4) tokens have a binary form');
+  }
+  const bytes = mergeUInt8Arrays(
+    new TextEncoder().encode('crawB'),
+    decodeBase64UrlToUint8(body.slice(1)),
+  );
+  decodeBinaryToken(bytes);
+  return bytes;
 }
 
 function removePrefix(token: string): string {

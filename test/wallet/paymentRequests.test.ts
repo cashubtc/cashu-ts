@@ -15,6 +15,7 @@ import {
 import { encodeCBOR, encodeUint8ToBase64UrlPadded } from '../../src/utils';
 import { encodeUint8ToBase64Url } from '../../src/utils/base64';
 import { encodeBech32m } from '../../src/utils/bech32m';
+import { MAX_PAYLOAD_LENGTH } from '../../src/utils/limits';
 import { encodeTLV } from '../../src/utils/tlv';
 
 describe('payment requests', () => {
@@ -803,6 +804,46 @@ describe('payment requests', () => {
       expect(decoded.mints).toEqual(pr.mints);
       expect(decoded.transport![0].type).toBe(pr.transport![0].type);
       expect(decoded.transport![0].target).toBe(pr.transport![0].target);
+    });
+  });
+
+  describe('toEncodedBinary - raw binary form (creqB + TLV)', () => {
+    const pr = new PaymentRequest({
+      id: 'b7a90176',
+      amount: 10,
+      unit: 'sat',
+      mints: ['https://8333.space:3338'],
+      transport: [{ type: PaymentRequestTransportType.POST, target: 'https://example.com/pay' }],
+    });
+
+    test('is the creqb TLV bytes behind a creqB prefix', () => {
+      const binary = pr.toEncodedBinary();
+      expect(new TextDecoder().decode(binary.subarray(0, 5))).toBe('creqB');
+      expect(encodeBech32m('creqb', binary.subarray(5)).toUpperCase()).toBe(pr.toEncodedCreqB());
+      expect(PaymentRequest.fromEncodedRequest(binary).toEncodedCreqB()).toBe(pr.toEncodedCreqB());
+    });
+
+    test('carries a request too long for creqb text', () => {
+      const mints = Array.from({ length: 30 }, (_, i) => `https://mint${i}.example.com/cashu/v1`);
+      const long = new PaymentRequest({ amount: 10, unit: 'sat', mints });
+      expect(() => long.toEncodedCreqB()).toThrow();
+      expect(PaymentRequest.fromEncodedRequest(long.toEncodedBinary()).mints).toEqual(mints);
+    });
+
+    test('rejects bytes without the prefix, and truncated TLV', () => {
+      const binary = pr.toEncodedBinary();
+      const token = new TextEncoder().encode('crawB');
+      expect(() => PaymentRequest.fromEncodedRequest(token)).toThrow(/prefix/);
+      expect(() => PaymentRequest.fromEncodedRequest(binary.subarray(0, 3))).toThrow(/prefix/);
+      expect(() =>
+        PaymentRequest.fromEncodedRequest(binary.subarray(0, binary.length - 1)),
+      ).toThrow(CTSError);
+    });
+
+    test('rejects bytes over the payload cap', () => {
+      const over = new Uint8Array(MAX_PAYLOAD_LENGTH + 1);
+      over.set(new TextEncoder().encode('creqB'));
+      expect(() => PaymentRequest.fromEncodedRequest(over)).toThrow(/too long/);
     });
   });
 
